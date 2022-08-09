@@ -1,0 +1,132 @@
+
+#include <DHT.h>        // Temp and Humifity sensor library
+#include <SD.h>         // SD Card library
+#include <SPI.h>        // Comms //
+#include <Wire.h>       // Comms //
+#include <RTClib.h>     // Real Tine Clock library
+#include <LiquidCrystal_I2C.h>  // LCD
+
+#define DHTPIN 2        // DHT Data pin
+#define DHTTYPE DHT22   // Declare model of sensor used
+
+  DHT dht(DHTPIN, DHTTYPE);   // Initialization setup for DHT sensor @ 16mhz
+  int chipSelect = 10;
+  File logFile;
+  RTC_DS1307 RTC;             // Declare Real Time Clock chip model
+  LiquidCrystal_I2C lcd(0x27, 16, 2);  // Set the LCD address to 0x27 for a 16 chars and 2 line display 
+  int TempPot = A0;     // Data pin for temperature control potentiometer
+  int SetTemp = 0;      // Activation temperature set point variable
+  int CheckTemp = 4;    // Pin for Check Temperature Button
+  int Relay = 3;        // Pin for relay coil
+
+  float Humidity, Temperature;    // declare var for HDT sensor info storage
+
+void setup() {
+
+ Serial.begin(9600);     // Initialize Serial and set baud rate to 57600
+ Wire.begin();            // Initialize I2C communication with RTC
+ RTC.begin();             // Initialize Real Time Clock
+ dht.begin();             // Initialize DHT Sensor
+ pinMode(chipSelect, OUTPUT);     // Set pin 10 High for SD library to work properly(BUGGY???)
+ pinMode(CheckTemp, INPUT);
+ pinMode(Relay, OUTPUT);
+ 
+ lcd.begin();             // Initialize LCD
+ lcd.backlight();         // Turn on the backlight
+
+  if (!RTC.isrunning()){                          // Check to see if RTC was successfully
+    Serial.println("RTC is NOT running!");         // Print line if not
+  }else{                   
+    // RTC.adjust(DateTime(F(__DATE__),F(__TIME__)));   // Set RTC to Computer current date and time
+     Serial.println("RTC set, starting LOG.");
+    }
+
+  if (!SD.begin(chipSelect)){
+    Serial.println("SD card initialization failed.");   
+  }else{
+    Serial.println("SD card initialized.");         // Check to see if SD Card is succesfully initialized
+  }   
+   }
+
+void loop() {
+
+ SetTemp = map(analogRead(TempPot),0,1023,10,30);
+ Serial.print("Set Temperature: ");
+ Serial.print(SetTemp);
+ Serial.print(" ");
+  
+ DateTime now = RTC.now();    // Set var now to current time
+
+ Serial.print(now.year(), DEC);
+ Serial.print('/');
+ Serial.print(now.month(), DEC);
+ Serial.print('/');
+ Serial.print(now.day(), DEC);
+ Serial.print(' ');
+ Serial.print(now.hour(), DEC);
+ Serial.print(':');
+ Serial.print(now.minute(), DEC);
+ Serial.print(':');
+ Serial.print(now.second(), DEC);     // Serial print Date and Time
+
+ Humidity = dht.readHumidity();
+ Temperature = dht.readTemperature();   // Read DHT data on pin 2 and store to variables
+
+ if (SetTemp <= Temperature || Humidity >= 50){
+  digitalWrite(Relay , HIGH);
+ } else {
+    digitalWrite(Relay , LOW);
+ }
+
+ Serial.print("    Humidity: ");
+ Serial.print(Humidity);
+ Serial.print("%, Temp: ");
+ Serial.print(Temperature);
+ Serial.println(" C");    // Serial print HDT Data
+
+ if (digitalRead(CheckTemp) == HIGH){
+    lcd.clear();
+    lcd.setCursor(2,0);
+    lcd.print("Set Temperature:");
+    lcd.setCursor(2,1);
+    lcd.print(SetTemp);
+    lcd.noCursor();
+    } else {
+       lcd.clear();
+       lcd.setCursor(2,0);
+       lcd.print("Temp: ");
+       lcd.print(Temperature);
+       lcd.setCursor(0,1);
+       lcd.print("Humidity: ");
+       lcd.print(Humidity);           // Print data to LCD
+       lcd.noCursor();
+ }
+ 
+
+ logFile = SD.open("LogFile.csv", FILE_WRITE);    // Open file with specified name on SD card
+
+ if (logFile){
+    logFile.print(now.year(), DEC);
+    logFile.print('/');
+    logFile.print(now.month(), DEC);
+    logFile.print('/');
+    logFile.print(now.day(), DEC);
+    logFile.print(' ');
+    logFile.print(now.hour(), DEC);
+    logFile.print(':');
+    logFile.print(now.minute(), DEC);
+    logFile.print(':');
+    logFile.print(now.second(), DEC);
+    logFile.print(',');   
+    logFile.print(Humidity);
+    logFile.print(',');
+    logFile.println(Temperature);    // Write data to file on SD card, data seperated by commas
+
+ logFile.close();   // Close file
+ } else {
+  Serial.println("Error opening LogFile");
+ }
+ 
+
+ delay(5000);   // Delay loop for 5 seconds
+ }
